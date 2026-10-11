@@ -171,6 +171,9 @@ class TestEndpoints(_Db):
         p = patch("shared.utils.eval_agent_runner.SnapshotAgent", FakeAgent)
         p.start()
         self.addCleanup(p.stop)
+        audit = patch("shared.utils.audit_service.log")
+        self.audit_log = audit.start()
+        self.addCleanup(audit.stop)
 
     def _run(self, **body):
         return self.client.post("/dashboard/api/evals/playground/run", json=dict({"agent_name": "bot"}, **body))
@@ -199,6 +202,26 @@ class TestEndpoints(_Db):
         self.assertEqual([r["cost_usd"] for r in results], [0.01, 0.01, None])
         self.assertEqual(data["variants"][2]["summary"]["unpriced_calls"], 1)
         self.assertNotIn("invocation_ids", results[0])
+
+    def test_each_run_is_audited_with_who_and_what_was_compared(self):
+        r = self._run(mode="prompt", prompt="hello",
+                      variants=[{"model_name": "m-x"}, {"version_id": self.v1}, {"instruction": "NEW"}])
+        self.assertEqual(r.status_code, 200, r.text)
+        self.audit_log.assert_called_once()
+        actor, action, resource_type, resource_id, details, _request = self.audit_log.call_args.args
+        self.assertEqual((actor, action, resource_type, resource_id),
+                         ("admin", "evals.playground_run", "agent", "bot"))
+        self.assertEqual((details["mode"], details["cases"]), ("prompt", 1))
+        a, b, c = details["variants"]
+        self.assertEqual((a["model_name"], a["version_id"]), ("m-x", None))
+        self.assertNotIn("instruction_changed", a)
+        self.assertEqual((b["model_name"], b["version_id"]), ("m-old", self.v1))
+        self.assertEqual(c["instruction_changed"]["chars"], 3)
+        self.assertNotIn("NEW", str(details), "changed instructions are not stored as text")
+
+    def test_a_refused_run_is_not_audited(self):
+        self._run(mode="prompt", prompt="", variants=[{}, {}])
+        self.audit_log.assert_not_called()
 
     def test_the_eval_suite_on_variants(self):
         r = self._run(mode="suite", variants=[{"model_name": "m-x"}, {}])

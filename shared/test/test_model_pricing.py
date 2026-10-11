@@ -7,6 +7,7 @@ LiteLLM's table. A model none of them prices has no cost, which must never read
 as free: LiteLLM reports 0 for models it does not know.
 """
 
+import json
 import os
 import sys
 import unittest
@@ -65,6 +66,32 @@ class TestPriceSources(_PricingTest):
     def test_openrouter_entries_without_a_fixed_price_are_skipped(self):
         prices = mp._parse_openrouter(OPENROUTER_PAYLOAD)
         self.assertEqual(set(prices), {"deepseek/deepseek-chat-v3.1"})
+
+    def test_openrouter_prices_that_are_not_finite_or_too_high_are_skipped(self):
+        # A NaN cost would make every sum over the model's calls NaN, and with it the budgets
+        payload = {"data": [
+            {"id": "a/nan", "pricing": {"prompt": "NaN", "completion": "0.000001"}},
+            {"id": "a/inf", "pricing": {"prompt": "0.000001", "completion": "inf"}},
+            {"id": "a/huge", "pricing": {"prompt": "5", "completion": "5"}},
+            {"id": "a/ok", "pricing": {"prompt": "0.0006", "completion": "0"}},
+        ]}
+        self.assertEqual(set(mp._parse_openrouter(payload)), {"a/ok"})
+
+    def test_an_oversized_openrouter_response_is_not_read(self):
+        response = MagicMock()
+        response.iter_bytes.return_value = iter([b"x" * 1024] * 8)
+        stream = MagicMock()
+        stream.__enter__.return_value = response
+        saved = (mp._openrouter, mp._openrouter_fetched_at)
+        self.addCleanup(lambda: setattr(mp, "_openrouter", saved[0]))
+        self.addCleanup(lambda: setattr(mp, "_openrouter_fetched_at", saved[1]))
+        with patch.object(mp, "_OPENROUTER_MAX_BYTES", 4096), \
+                patch("httpx.stream", return_value=stream), \
+                patch.object(mp, "_price_waiting_calls") as waiting:
+            mp._fetch_openrouter()
+        self.assertEqual(response.iter_bytes.return_value.__length_hint__(), 3, "reading stopped at the cap")
+        waiting.assert_not_called()
+        self.assertEqual(mp._openrouter_fetched_at, saved[1], "nothing was stored")
 
     def test_a_manual_price_wins_and_zero_means_free(self):
         manual = {"gemini-2.5-flash": mp.Price(1e-6, 2e-6, mp.SOURCE_MANUAL),
@@ -176,7 +203,9 @@ class TestOpenRouterArrival(_DbTest):
         session.commit()
         session.close()
         response = MagicMock()
-        response.json.return_value = OPENROUTER_PAYLOAD
+        response.iter_bytes.return_value = [json.dumps(OPENROUTER_PAYLOAD).encode()]
+        stream = MagicMock()
+        stream.__enter__.return_value = response
         db = MagicMock()
         db.get_session.side_effect = lambda: self.Session()
         # The fetch stores the list in the module; put back what was there
@@ -184,7 +213,7 @@ class TestOpenRouterArrival(_DbTest):
         self.addCleanup(lambda: setattr(mp, "_openrouter", saved[0]))
         self.addCleanup(lambda: setattr(mp, "_openrouter_fetched_at", saved[1]))
         # Pricing reads the list the fetch just stored
-        with patch("httpx.get", return_value=response), \
+        with patch("httpx.stream", return_value=stream), \
                 patch("shared.utils.database_client.get_database_client", return_value=db), \
                 patch.object(mp, "_openrouter_prices", side_effect=lambda wait=False: mp._openrouter):
             mp._fetch_openrouter()

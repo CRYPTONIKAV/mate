@@ -73,13 +73,50 @@ class TestPolicy(unittest.TestCase):
         d = _directives(csp.build_policy())
         self.assertEqual(d["default-src"], ["'self'"])
         self.assertIn("'self'", d["script-src"])
-        self.assertIn("https://cdn.jsdelivr.net", d["script-src"])
         self.assertNotIn("*", d["script-src"])
         self.assertNotIn("https:", d["script-src"])
-        # WebAssembly for Pyodide, but never eval() of JavaScript
-        self.assertIn("'wasm-unsafe-eval'", d["script-src"])
         self.assertNotIn("'unsafe-eval'", d["script-src"])
+        # Pyodide runs only on the canvas page, so no WebAssembly here
+        self.assertNotIn("'wasm-unsafe-eval'", d["script-src"])
         self.assertNotIn("*", d["connect-src"])
+
+    def test_cdn_scripts_are_allowed_by_path_not_by_host(self):
+        # jsdelivr and cdnjs serve any npm package or GitHub repository: a whole
+        # host would let an injected tag load anyone's script
+        scripts = _directives(csp.build_policy(nonce="abc"))["script-src"]
+        for host in ("https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"):
+            self.assertNotIn(host, scripts)
+            self.assertNotIn(host + "/", scripts)
+            for source in scripts:
+                if source.startswith(host):
+                    self.assertRegex(source, r"^https://[^/]+/(npm|ajax/libs)/[^/]+")
+        self.assertIn("https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/", scripts)
+        self.assertIn("https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/", scripts)
+
+    def test_every_cdn_script_in_the_templates_is_allowed(self):
+        # A script tag the policy does not cover breaks its page under enforce
+        import re
+        root = Path(__file__).resolve().parents[2]
+        scripts = [s for s in _directives(csp.build_policy(nonce="abc"))["script-src"] if s.startswith("https://")]
+
+        def allowed(url):
+            for source in scripts:
+                if source.count("/") == 2:  # a whole host
+                    if url.split("/")[2] == source.split("/")[2]:
+                        return True
+                elif url == source or (source.endswith("/") and url.startswith(source)):
+                    return True
+            return False
+
+        cdn = re.compile(r'<script[^>]*\ssrc="(https://(?:cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|cdn\.tailwindcss\.com)/?[^"]*)"')
+        urls = set()
+        for folder in ("templates", "static/js"):
+            for path in (root / folder).rglob("*"):
+                if path.suffix in (".html", ".js"):
+                    urls.update(cdn.findall(path.read_text(encoding="utf-8", errors="ignore")))
+        self.assertTrue(urls)
+        for url in sorted(urls):
+            self.assertTrue(allowed(url), url)
 
     def test_the_dashboard_may_only_be_framed_by_itself(self):
         d = _directives(csp.build_policy())
@@ -111,8 +148,7 @@ class TestStrictPolicy(unittest.TestCase):
         d = _directives(csp.build_policy(nonce="abc"))
         self.assertIn("'nonce-abc'", d["script-src"])
         self.assertNotIn("'unsafe-inline'", d["script-src"])
-        self.assertIn("'wasm-unsafe-eval'", d["script-src"])
-        self.assertIn("https://cdn.jsdelivr.net", d["script-src"])
+        self.assertIn("https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/", d["script-src"])
         # Styles keep it: Tailwind's CDN injects <style>, and a style cannot run code
         self.assertIn("'unsafe-inline'", d["style-src"])
 
@@ -395,7 +431,7 @@ class TestWidgetChatPage(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(self._ancestors(r), ["'self'", "https://shop.example.com"])
         # The rest is the dashboard's policy
-        self.assertIn("https://cdn.jsdelivr.net", _directives(r.headers[csp.CSP_REPORT_ONLY_HEADER])["script-src"])
+        self.assertIn("https://cdn.tailwindcss.com", _directives(r.headers[csp.CSP_REPORT_ONLY_HEADER])["script-src"])
 
     def test_without_strict_origins_any_site_may_frame_it(self):
         self.assertEqual(self._ancestors(self._get(["https://shop.example.com"], strict=False)), ["*"])
