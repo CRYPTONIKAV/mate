@@ -130,7 +130,9 @@ Below it, each prompt has every variant's reply with its own score, time and cos
   apply instructions with **Suggest a fix**.
 - The runs are real model calls. They cost money, and appear on the
   [Usage page](usage-and-audit.md) under the agent, by the user `eval_runner`, as eval
-  runs do.
+  runs do. The audit log records who started each run (`evals.playground_run`), with
+  each variant's model and version, and for changed instructions their length and a
+  hash, not the text.
 - Cost is shown for models with a price (see [Model prices](settings.md#model-prices)).
   A variant on a model without one shows how many calls were left unpriced.
 - A variant that cannot run, for example because of a model name that does not

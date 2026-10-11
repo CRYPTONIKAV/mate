@@ -39,10 +39,22 @@ REPORT_PATH = "/csp-report"
 # The CDNs the templates load from. Keep in step with the templates: a host
 # missing here shows up as a violation report, a host left here after its last
 # use is an unneeded opening.
+#
+# Scripts are allowed by path, not by host: jsdelivr and cdnjs serve any npm
+# package or GitHub repository, so a whole host would let anyone who can inject
+# a tag load their own script. A path ending in "/" is a prefix; any other path
+# must match exactly. Pyodide is not here: it runs only on the canvas page.
 _SCRIPT_HOSTS = [
-    "https://cdn.tailwindcss.com",
-    "https://cdn.jsdelivr.net",    # Chart.js, Monaco, React Flow, Pyodide, Swagger UI
-    "https://cdnjs.cloudflare.com",  # Ace
+    "https://cdn.tailwindcss.com",  # serves only Tailwind
+    "https://cdn.jsdelivr.net/npm/chart.js",
+    "https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/",
+    "https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js",
+    "https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js",
+    "https://cdn.jsdelivr.net/npm/reactflow@11.11.4/",
+    "https://cdn.jsdelivr.net/npm/markdown-it@15.0.2/",
+    "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/",  # FastAPI's /admin-docs and /docs
+    "https://cdn.jsdelivr.net/npm/redoc@2/",  # FastAPI's /redoc
+    "https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/",
 ]
 _STYLE_HOSTS = [
     "https://cdn.jsdelivr.net",
@@ -54,7 +66,7 @@ _FONT_HOSTS = [
     "https://cdnjs.cloudflare.com",
     "https://fonts.gstatic.com",
 ]
-# Pyodide fetches its wasm and packages; Monaco and Ace fetch their own modules.
+# Monaco and Ace fetch their own modules.
 _CONNECT_HOSTS = ["https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"]
 _FRAME_HOSTS = ["https://dartpad.dev"]  # Work Room's Dart runner
 
@@ -104,9 +116,9 @@ def build_policy(frame_ancestors: str = "'self'", allow_eval: bool = False,
     """
     extra = extra_sources()
     if nonce is None:
-        script_keywords = ["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'"]
+        script_keywords = ["'self'", "'unsafe-inline'"]
     else:
-        script_keywords = ["'self'", f"'nonce-{nonce}'", "'wasm-unsafe-eval'"]
+        script_keywords = ["'self'", f"'nonce-{nonce}'"]
     if allow_eval:
         script_keywords.append("'unsafe-eval'")
 
@@ -120,8 +132,6 @@ def build_policy(frame_ancestors: str = "'self'", allow_eval: bool = False,
 
     directives = [
         "default-src 'self'",
-        # 'wasm-unsafe-eval' lets Pyodide compile WebAssembly;
-        # it does not allow eval() of JavaScript.
         directive("script-src", script_keywords, _SCRIPT_HOSTS, extra),
         directive("style-src", ["'self'", "'unsafe-inline'"], _STYLE_HOSTS, extra),
         directive("font-src", ["'self'", "data:"], _FONT_HOSTS, extra),
@@ -130,7 +140,7 @@ def build_policy(frame_ancestors: str = "'self'", allow_eval: bool = False,
         "img-src 'self' data: blob: https:",
         "media-src 'self' data: blob:",
         directive("connect-src", ["'self'"], _CONNECT_HOSTS, extra),
-        # Monaco, Ace and Pyodide start their workers from blob: URLs
+        # Monaco and Ace start their workers from blob: URLs
         "worker-src 'self' blob:",
         directive("frame-src", ["'self'"], _FRAME_HOSTS, extra),
         "object-src 'none'",

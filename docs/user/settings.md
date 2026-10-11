@@ -49,7 +49,8 @@ comes from, in order:
 
 1. a price set on this page;
 2. for `openrouter/` models, OpenRouter's own price list, which MATE fetches once a
-   day (only if an `openrouter/` model is used);
+   day (only if an `openrouter/` model is used). An entry that is not a usable price
+   (negative, not a number, or over $100,000 per million tokens) is skipped;
 3. LiteLLM's price list.
 
 A model none of them covers has **no price**: its calls are left out of the cost,

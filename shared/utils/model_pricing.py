@@ -20,7 +20,9 @@ input (the logs do not record cached tokens) and without tiered prices for very
 long prompts.
 """
 
+import json
 import logging
+import math
 import threading
 import time
 from dataclasses import dataclass
@@ -98,6 +100,12 @@ _openrouter_attempted_at = 0.0
 _openrouter_lock = threading.Lock()
 
 
+# A response larger than this is not a price list; it is read no further
+_OPENROUTER_MAX_BYTES = 25 * 1024 * 1024
+# US dollars per token, the same ceiling as a manual price (100000 per million)
+_MAX_PRICE_PER_TOKEN = 0.1
+
+
 def _parse_openrouter(payload: Dict[str, Any]) -> Dict[str, Price]:
     prices: Dict[str, Price] = {}
     for model in payload.get("data") or []:
@@ -106,8 +114,11 @@ def _parse_openrouter(payload: Dict[str, Any]) -> Dict[str, Price]:
             prompt, completion = float(pricing["prompt"]), float(pricing["completion"])
         except (KeyError, TypeError, ValueError):
             continue
-        # A router such as openrouter/auto lists -1: its price depends on the model it picks
-        if prompt < 0 or completion < 0 or not model.get("id"):
+        # A router such as openrouter/auto lists -1: its price depends on the model it picks.
+        # NaN or infinity would make every sum over the model's calls NaN, and with
+        # it every dollar budget that counts them.
+        if not all(math.isfinite(v) and 0 <= v <= _MAX_PRICE_PER_TOKEN for v in (prompt, completion)) \
+                or not model.get("id"):
             continue
         prices[model["id"]] = Price(prompt, completion, SOURCE_OPENROUTER)
     return prices
@@ -117,9 +128,14 @@ def _fetch_openrouter() -> None:
     global _openrouter, _openrouter_fetched_at
     try:
         import httpx
-        response = httpx.get(OPENROUTER_MODELS_URL, timeout=20)
-        response.raise_for_status()
-        prices = _parse_openrouter(response.json())
+        body = bytearray()
+        with httpx.stream("GET", OPENROUTER_MODELS_URL, timeout=20) as response:
+            response.raise_for_status()
+            for chunk in response.iter_bytes():
+                body.extend(chunk)
+                if len(body) > _OPENROUTER_MAX_BYTES:
+                    raise ValueError(f"response larger than {_OPENROUTER_MAX_BYTES} bytes")
+        prices = _parse_openrouter(json.loads(bytes(body)))
     except Exception as e:
         logger.warning(f"Could not fetch OpenRouter's model prices: {e}")
         return

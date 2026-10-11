@@ -7,6 +7,7 @@ covers:
   - server/csp.py
   - static/js/csp-actions.js
   - static/js/workroom-canvas-frame.js
+  - static/js/workroom-python.js
 ---
 
 # Content-Security-Policy
@@ -20,12 +21,12 @@ list, to send data to one, or to let another site frame the dashboard.
 
 | Directive | Allows |
 |---|---|
-| `script-src` | `'self'`, inline scripts that carry the response's nonce (see below), WebAssembly (`'wasm-unsafe-eval'`, for Pyodide), and the CDNs the templates use: `cdn.tailwindcss.com`, `cdn.jsdelivr.net`, `cdnjs.cloudflare.com` |
+| `script-src` | `'self'`, inline scripts that carry the response's nonce (see below), `cdn.tailwindcss.com`, and on jsdelivr and cdnjs only the paths of the versions the templates load (see below) |
 | `style-src` | `'self'`, inline styles, `cdn.jsdelivr.net`, `cdnjs.cloudflare.com`, `fonts.googleapis.com` |
 | `font-src` | `'self'`, `data:`, `cdn.jsdelivr.net`, `cdnjs.cloudflare.com`, `fonts.gstatic.com` |
 | `connect-src` | `'self'` (including the Work Room's WebSocket), `cdn.jsdelivr.net`, `cdnjs.cloudflare.com` |
 | `img-src` | `'self'`, `data:`, `blob:`, any `https:` host (answers show images from anywhere) |
-| `worker-src` | `'self'`, `blob:` (Monaco, Ace and Pyodide workers) |
+| `worker-src` | `'self'`, `blob:` (Monaco and Ace workers) |
 | `frame-src` | `'self'`, `dartpad.dev` (the Work Room's Dart runner) |
 | `object-src` | nothing |
 | `base-uri` | `'self'` |
@@ -172,11 +173,24 @@ on MATE's own origin.
 "Open in new tab" opens the same page. It used to open the code as a `blob:`
 URL, which ran it on MATE's origin with no sandbox.
 
-Python is different: Pyodide needs workers that a sandbox breaks, so it runs in
-a `srcdoc` iframe under the Work Room's policy. The iframe loads Pyodide from a
-listed CDN and the runner from `static/js/workroom-python.js`. The code is a
-`<script type="application/json">` element, data the browser never runs, so no
-inline script is needed.
+Python runs on the same page. Agent-written Python is no safer than JavaScript:
+Pyodide's `js` module reaches whatever window it runs in. The Work Room reads
+`static/js/workroom-python.js` and sends it inline, with Pyodide from jsdelivr,
+since the sandboxed page cannot load files from MATE itself. The code is a
+`<script type="application/json">` element, data the browser never runs. Python
+on that page cannot reach the Work Room or MATE's storage.
+
+### CDN scripts by path
+
+jsdelivr and cdnjs serve any npm package or GitHub repository, so allowing the
+whole host would let anyone who can inject a `<script>` tag load their own code
+from there. `script-src` therefore lists each library's path with its version,
+in `_SCRIPT_HOSTS` in `server/csp.py`: a path ending in `/` covers everything
+under it (Monaco's modules, for example), any other path must match exactly.
+Adding a CDN script to a template means adding its path there;
+`shared/test/test_csp.py` fails on a template script the policy does not cover.
+Styles, fonts and connections still allow the whole hosts: none of them can run
+code.
 
 ## Also allowed
 
@@ -268,6 +282,4 @@ The hosts are added to `script-src`, `style-src`, `font-src`, `connect-src` and
 
 ## Known gaps
 
-- **Python in the Work Room canvas** runs without a sandbox, on MATE's origin
-  (see above). Python code can reach the page through Pyodide's `js` module.
 - **Standalone builds** (`standalone_server.py`) do not send this policy yet.

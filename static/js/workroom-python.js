@@ -1,9 +1,9 @@
 /*
- * Runs the Work Room canvas's Python code with Pyodide, inside the canvas
- * iframe. The code comes from <script type="application/json" id="mateCode">,
- * which the browser never runs: a file rather than an inline script, so the
- * dashboard's Content-Security-Policy, which the iframe inherits, needs no
- * exception for it.
+ * Runs the Work Room canvas's Python code with Pyodide, on the sandboxed canvas
+ * page (/dashboard/workroom/canvas). The Work Room reads this file and puts it
+ * inline in the document it sends that page, which cannot load files from MATE
+ * itself. The code comes from <script type="application/json" id="mateCode">,
+ * which the browser never runs.
  */
 (async function () {
     'use strict';

@@ -6457,9 +6457,27 @@ class DashboardServer:
             finally:
                 session.close()
 
+            import hashlib
+            from starlette.concurrency import run_in_threadpool
+            from shared.utils.audit_service import ACTION_PLAYGROUND_RUN, RESOURCE_AGENT, log
+
+            # Before the run, so a run that fails or never ends is recorded too.
+            # Changed instructions are recorded by length and hash, not as text.
+            audited = []
+            for variant, raw in zip(variants, raw_variants):
+                detail: Dict[str, Any] = {"label": variant.label,
+                                          "model_name": variant.snapshot.get("model_name"),
+                                          "version_id": raw.get("version_id") or None}
+                text = variant.snapshot.get("instruction") or ""
+                if text != (current.get("instruction") or ""):
+                    detail["instruction_changed"] = {
+                        "chars": len(text), "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]}
+                audited.append(detail)
+            await run_in_threadpool(log, username, ACTION_PLAYGROUND_RUN, RESOURCE_AGENT, config.name,
+                                    {"mode": mode, "cases": len(cases), "variants": audited}, request)
+
             # Have OpenRouter's prices before the runs log their calls, so a variant on
             # an openrouter model is not compared as unpriced
-            from starlette.concurrency import run_in_threadpool
             from shared.utils.model_pricing import OPENROUTER_PREFIX, price_for
             for model in {v.snapshot.get("model_name") or "" for v in variants}:
                 if model.startswith(OPENROUTER_PREFIX):
