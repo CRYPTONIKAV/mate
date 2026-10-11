@@ -3,16 +3,17 @@ title: "Alerts: evaluation and payloads"
 summary: How alert rules are evaluated, what each condition reads, and the payload a webhook receives.
 audience: dev
 order: 130
-status: migrated
 covers:
   - shared/utils/alert_service.py
+  - shared/utils/trigger_runner.py
+  - shared/utils/dashboard/dashboard_server.py
 ---
 
 # Alerts
 
 Rule-based notifications for the things that mean something is wrong: agents
 failing, agents answering on their fallback model, guardrails firing repeatedly, and
-token budgets running out.
+token or dollar budgets running out.
 
 ## Enable
 
@@ -32,11 +33,16 @@ database queries and outbound HTTP.
 |---|---|---|
 | `agent_error_count` | `{"threshold": 5, "window_minutes": 15}` | `token_usage_logs` rows with `status='ERROR'` |
 | `guardrail_count` | `{"threshold": 10, "window_minutes": 60, "guardrail_type": null, "action_taken": null}` | `guardrail_logs` |
-| `budget_threshold` | `{"threshold_pct": 90, "period": "day", "token_limit": null}` | token sums vs. the budget |
+| `budget_threshold` | `{"threshold_pct": 90, "period": "day", "token_limit": null}` | token or dollar sums vs. the budget |
 | `model_fallback_count` | `{"threshold": 5, "window_minutes": 15}` | `audit_logs` rows with `action='agent.model_fallback'` |
 
-`period` is `hour`, `day` or `month`. A null `token_limit` resolves the limit from the
+For token budgets, `period` is `hour`, `day` or `month`. A null `token_limit` resolves the limit from the
 matching `rate_limit_config` row for the same scope, so budgets stay configured in one place.
+
+Dollar budgets: `budget_threshold` also accepts `{"unit": "usd", "threshold_pct": 90, "period": "day", "usd_limit": null}`.
+USD budget rules measure dollar cost from `token_usage_logs` via `_measure_usd_budget`. They support only `day` or `month`
+periods (not `hour`), and only `user`, `agent`, or `project` scopes. When `usd_limit` is null, it resolves from the
+matching `rate_limit_config` row (`usd_per_day` or `usd_per_month`).
 
 RBAC denials are recorded as `ACCESS_DENIED`, not `ERROR`, so they never trip an error rule.
 
@@ -52,6 +58,8 @@ filter on `resource_id`, user scope on `actor`.
 `agent`, `project`, `user`, or `global`, with `scope_id` naming the target (agent name,
 project id, user id). Neither `token_usage_logs` nor `guardrail_logs` carries a project id,
 so a project-scoped rule is expanded into that project's agent names at evaluation time.
+
+A `global` budget rule never fires: `_measure_budget` returns `None` for global scope.
 
 `guardrail_count` cannot be scoped to a user — guardrail hits are recorded per agent.
 
