@@ -886,8 +886,8 @@
             return function () { document.removeEventListener('keydown', handleKey); };
         }, [onCancel]);
 
-        var inputStyle = { padding: '6px 10px', borderRadius: 6, fontSize: 12, border: '1px solid #475569', background: '#0f172a', color: '#f1f5f9', outline: 'none', width: '100%', fontFamily: "'Inter',sans-serif" };
-        var labelStyle = { fontSize: 11, fontWeight: 600, color: '#94a3b8', fontFamily: "'Inter',sans-serif", display: 'block', marginBottom: 3 };
+        var inputStyle = { padding: '6px 10px', borderRadius: 6, fontSize: 12, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-primary)', outline: 'none', width: '100%', fontFamily: "'Inter',sans-serif" };
+        var labelStyle = { fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', fontFamily: "'Inter',sans-serif", display: 'block', marginBottom: 3 };
 
         var handleSubmit = function () {
             if (!serverName.trim()) return;
@@ -911,10 +911,10 @@
             React.createElement(
                 'div',
                 {
-                    style: { background: '#1e293b', borderRadius: 12, padding: '20px 24px', minWidth: 360, maxWidth: 480, width: '90vw', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', border: '1px solid #334155', display: 'flex', flexDirection: 'column', gap: 12 },
+                    style: { background: 'var(--bg-surface)', borderRadius: 12, padding: '20px 24px', minWidth: 360, maxWidth: 480, width: '90vw', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 12 },
                     onClick: function (e) { e.stopPropagation(); },
                 },
-                React.createElement('div', { style: { fontSize: 14, fontWeight: 700, color: '#c4b5fd', fontFamily: "'Inter',sans-serif" } }, '⬡ Add MCP Server to ' + agentName),
+                React.createElement('div', { style: { fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', fontFamily: "'Inter',sans-serif" } }, '⬡ Add MCP Server to ' + agentName),
                 /* Server Name */
                 React.createElement('div', null,
                     React.createElement('label', { style: labelStyle }, 'Server Name'),
@@ -954,11 +954,11 @@
                     { style: { display: 'flex', gap: 8, justifyContent: 'flex-end', paddingTop: 4 } },
                     React.createElement('button', {
                         onClick: onCancel,
-                        style: { padding: '7px 16px', borderRadius: 6, fontSize: 12, background: '#334155', color: '#94a3b8', border: 'none', cursor: 'pointer', fontFamily: "'Inter',sans-serif" },
+                        style: { padding: '7px 16px', borderRadius: 6, fontSize: 12, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer', fontFamily: "'Inter',sans-serif" },
                     }, 'Cancel'),
                     React.createElement('button', {
                         onClick: handleSubmit,
-                        style: { padding: '7px 16px', borderRadius: 6, fontSize: 12, background: '#818cf8', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontFamily: "'Inter',sans-serif" },
+                        style: { padding: '7px 16px', borderRadius: 6, fontSize: 12, background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontFamily: "'Inter',sans-serif" },
                     }, 'Add Server'),
                 ),
             ),
@@ -1001,16 +1001,16 @@
                 'div',
                 {
                     style: {
-                        background: '#1e293b', borderRadius: 12, padding: '24px 28px',
+                        background: 'var(--bg-surface)', borderRadius: 12, padding: '24px 28px',
                         minWidth: 320, boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
                         display: 'flex', flexDirection: 'column', gap: 16,
-                        border: '1px solid #334155',
+                        border: '1px solid var(--border)',
                     },
                     onClick: (e) => e.stopPropagation(),
                 },
                 React.createElement('div', {
                     style: {
-                        fontSize: 15, fontWeight: 700, color: '#f1f5f9',
+                        fontSize: 15, fontWeight: 700, color: 'var(--text-primary)',
                         fontFamily: "'Inter', sans-serif"
                     },
                 }, 'New Agent'),
@@ -1021,8 +1021,8 @@
                     onKeyDown: (e) => { if (e.key === 'Enter') handleSubmit(); },
                     style: {
                         padding: '8px 12px', borderRadius: 6, fontSize: 14,
-                        border: '1px solid #475569', background: '#0f172a',
-                        color: '#f1f5f9', outline: 'none', width: '100%',
+                        border: '1px solid var(--border)', background: 'var(--bg-surface)',
+                        color: 'var(--text-primary)', outline: 'none', width: '100%',
                         fontFamily: "'Inter', sans-serif",
                     },
                 }),
@@ -1033,7 +1033,7 @@
                         onClick: props.onCancel,
                         style: {
                             padding: '7px 16px', borderRadius: 6, fontSize: 13,
-                            background: '#334155', color: '#94a3b8', border: 'none',
+                            background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)',
                             cursor: 'pointer', fontFamily: "'Inter', sans-serif",
                         },
                     }, 'Cancel'),
@@ -1041,7 +1041,7 @@
                         onClick: handleSubmit,
                         style: {
                             padding: '7px 16px', borderRadius: 6, fontSize: 13,
-                            background: '#3b82f6', color: '#fff', border: 'none',
+                            background: 'var(--accent)', color: '#fff', border: 'none',
                             cursor: 'pointer', fontWeight: 600,
                             fontFamily: "'Inter', sans-serif",
                         },
