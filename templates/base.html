@@ -436,13 +436,13 @@
                 <div id="adkStatusIndicator" class="w-2 h-2 bg-gray-400 rounded-full"></div>
                 <span id="adkStatusText" class="text-sm text-gray-600 dark:text-gray-400">Checking...</span>
                 <div class="flex gap-1">
-                    <button id="startAdkBtn" onclick="controlAdkServer('start')" title="Start" class="mate-adk-btn hidden touch-target">
+                    <button aria-label="Start" id="startAdkBtn" onclick="controlAdkServer('start')" title="Start" class="mate-adk-btn hidden touch-target">
                         <i class="fas fa-play"></i>
                     </button>
-                    <button id="stopAdkBtn" onclick="controlAdkServer('stop')" title="Stop" class="mate-adk-btn hidden touch-target">
+                    <button aria-label="Stop" id="stopAdkBtn" onclick="controlAdkServer('stop')" title="Stop" class="mate-adk-btn hidden touch-target">
                         <i class="fas fa-stop"></i>
                     </button>
-                    <button id="restartAdkBtn" onclick="controlAdkServer('restart')" title="Restart" class="mate-adk-btn hidden touch-target">
+                    <button aria-label="Restart" id="restartAdkBtn" onclick="controlAdkServer('restart')" title="Restart" class="mate-adk-btn hidden touch-target">
                         <i class="fas fa-redo"></i>
                     </button>
                 </div>
@@ -669,7 +669,7 @@
 
             <!-- Minimize Toggle Button -->
             <div class="mate-sidebar-foot">
-                <button id="sidebarToggle" onclick="toggleSidebar()" title="Toggle sidebar">
+                <button aria-label="Toggle sidebar" id="sidebarToggle" onclick="toggleSidebar()" title="Toggle sidebar">
                     <i id="sidebarToggleIcon" class="fas fa-chevron-left"></i>
                 </button>
             </div>
@@ -690,7 +690,7 @@
                     <i class="fas fa-key" style="color: var(--accent); font-size: 13px;"></i>
                     Personal Access Tokens
                 </h3>
-                <button type="button" onclick="closeTokensModal()" class="touch-target" style="width: 30px; height: 30px; border-radius: 9px; border: none; background: var(--bg-surface-2); color: var(--text-secondary); cursor: pointer;">
+                <button aria-label="Close" type="button" onclick="closeTokensModal()" class="touch-target" style="width: 30px; height: 30px; border-radius: 9px; border: none; background: var(--bg-surface-2); color: var(--text-secondary); cursor: pointer;">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -874,7 +874,7 @@
             notification.innerHTML = `
                 <i class="fas ${icon}" style="font-size: 15px; color: ${iconColor}; flex-shrink: 0;"></i>
                 <span style="font-size: 13px; color: var(--text-primary); flex: 1;">${message}</span>
-                <button onclick="this.parentElement.remove()" style="border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; flex-shrink: 0;">
+                <button onclick="this.parentElement.remove()" aria-label="Close notification" style="border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; flex-shrink: 0;">
                     <i class="fas fa-times text-sm"></i>
                 </button>
             `;
