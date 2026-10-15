@@ -2,6 +2,13 @@
  * Alerts Page — MATE Dashboard
  * CRUD for alert rules plus a non-destructive test fire.
  */
+
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('AlertPage.closeModal', 'AlertPage.deleteRule', 'AlertPage.loadRules',
+                  'AlertPage.onBudgetUnitChange',
+                  'AlertPage.onConditionChange', 'AlertPage.onDestinationChange',
+                  'AlertPage.openCreateModal', 'AlertPage.openEditModal', 'AlertPage.saveRule',
+                  'AlertPage.testRule', 'AlertPage.toggleRule');
 const AlertPage = (function () {
     'use strict';
 
@@ -20,6 +27,8 @@ const AlertPage = (function () {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
     function init() {
+        // Enter in a field must not submit the form and reload the page; Save saves
+        document.getElementById('ruleForm').addEventListener('submit', (e) => e.preventDefault());
         loadRules();
     }
 
@@ -45,7 +54,7 @@ const AlertPage = (function () {
     function _describeCondition(rule) {
         const c = rule.condition_config || {};
         if (rule.condition_type === 'budget_threshold') {
-            return `${esc(c.threshold_pct ?? 90)}% of ${esc(c.period || 'day')} budget`;
+            return `${esc(c.threshold_pct ?? 90)}% of ${esc(c.period || 'day')} ${c.unit === 'usd' ? 'dollar' : 'token'} budget`;
         }
         return `${esc(c.threshold ?? '?')} in ${esc(c.window_minutes ?? '?')} min`;
     }
@@ -85,10 +94,10 @@ const AlertPage = (function () {
                 <td class="px-3 py-2">${esc(lastFired)}<div class="text-gray-500">${esc(rule.fire_count)} fired</div>${error}</td>
                 <td class="px-3 py-2">${status}</td>
                 <td class="px-3 py-2 text-right whitespace-nowrap">
-                    <button onclick="AlertPage.testRule(${rule.id})" class="text-blue-600 hover:text-blue-800 mr-2" title="Test"><i class="fas fa-vial"></i></button>
-                    <button onclick="AlertPage.toggleRule(${rule.id})" class="text-gray-600 hover:text-gray-800 mr-2" title="Enable/disable"><i class="fas fa-power-off"></i></button>
-                    <button onclick="AlertPage.openEditModal(${rule.id})" class="text-gray-600 hover:text-gray-800 mr-2" title="Edit"><i class="fas fa-pen"></i></button>
-                    <button onclick="AlertPage.deleteRule(${rule.id})" class="text-red-600 hover:text-red-800" title="Delete"><i class="fas fa-trash"></i></button>
+                    <button data-click="AlertPage.testRule" data-args="[${rule.id}]" class="text-blue-600 hover:text-blue-800 mr-2" title="Test"><i class="fas fa-vial"></i></button>
+                    <button data-click="AlertPage.toggleRule" data-args="[${rule.id}]" class="text-gray-600 hover:text-gray-800 mr-2" title="Enable/disable"><i class="fas fa-power-off"></i></button>
+                    <button data-click="AlertPage.openEditModal" data-args="[${rule.id}]" class="text-gray-600 hover:text-gray-800 mr-2" title="Edit"><i class="fas fa-pen"></i></button>
+                    <button data-click="AlertPage.deleteRule" data-args="[${rule.id}]" class="text-red-600 hover:text-red-800" title="Delete"><i class="fas fa-trash"></i></button>
                 </td>
             </tr>`;
         }).join('');
@@ -98,6 +107,20 @@ const AlertPage = (function () {
         const isBudget = document.getElementById('formCondition').value === 'budget_threshold';
         document.getElementById('budgetFields').classList.toggle('hidden', !isBudget);
         document.getElementById('countFields').classList.toggle('hidden', isBudget);
+    }
+
+    // Dollar budgets exist per day and per month only, as on the Rate Limits page
+    function onBudgetUnitChange() {
+        const usd = document.getElementById('formBudgetUnit').value === 'usd';
+        const period = document.getElementById('formPeriod');
+        period.querySelector('option[value="hour"]').disabled = usd;
+        if (usd && period.value === 'hour') period.value = 'day';
+        const limit = document.getElementById('formTokenLimit');
+        document.getElementById('formLimitLabel').textContent = usd
+            ? 'Limit in USD (blank = use the Rate Limits budget)'
+            : 'Token limit (blank = use the Rate Limits budget)';
+        limit.step = usd ? '0.01' : '1';
+        limit.min = usd ? '0.01' : '1';
     }
 
     function onDestinationChange() {
@@ -114,6 +137,7 @@ const AlertPage = (function () {
         document.getElementById('ruleModalTitle').textContent = 'New Alert Rule';
         document.getElementById('ruleForm').reset();
         onConditionChange();
+        onBudgetUnitChange();
         onDestinationChange();
         document.getElementById('ruleModal').classList.remove('hidden');
     }
@@ -134,8 +158,10 @@ const AlertPage = (function () {
         document.getElementById('formThreshold').value = c.threshold ?? 5;
         document.getElementById('formWindow').value = c.window_minutes ?? 15;
         document.getElementById('formThresholdPct').value = c.threshold_pct ?? 90;
+        document.getElementById('formBudgetUnit').value = c.unit === 'usd' ? 'usd' : 'tokens';
+        onBudgetUnitChange();
         document.getElementById('formPeriod').value = c.period || 'day';
-        document.getElementById('formTokenLimit').value = c.token_limit || '';
+        document.getElementById('formTokenLimit').value = (c.unit === 'usd' ? c.usd_limit : c.token_limit) ?? '';
 
         const d = rule.destination_config || {};
         // headers come back redacted, so only the address fields are safe to prefill
@@ -163,7 +189,12 @@ const AlertPage = (function () {
                 period: document.getElementById('formPeriod').value,
             };
             const limit = document.getElementById('formTokenLimit').value;
-            if (limit) conditionConfig.token_limit = parseInt(limit, 10);
+            if (document.getElementById('formBudgetUnit').value === 'usd') {
+                conditionConfig.unit = 'usd';
+                if (limit) conditionConfig.usd_limit = parseFloat(limit);
+            } else if (limit) {
+                conditionConfig.token_limit = parseInt(limit, 10);
+            }
         } else {
             conditionConfig = {
                 threshold: parseInt(document.getElementById('formThreshold').value, 10),
@@ -271,6 +302,7 @@ const AlertPage = (function () {
         openEditModal,
         closeModal,
         onConditionChange,
+        onBudgetUnitChange,
         onDestinationChange,
         saveRule,
         toggleRule,
@@ -278,3 +310,5 @@ const AlertPage = (function () {
         testRule,
     };
 })();
+// A top-level const is not on window, where csp-actions.js looks names up
+window.AlertPage = AlertPage;

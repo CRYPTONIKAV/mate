@@ -97,6 +97,11 @@ class TokenUsageLog(Base):
     status = Column(String(50), nullable=True, default='SUCCESS')  # SUCCESS, ERROR, ACCESS_DENIED, etc.
     error_description = Column(Text, nullable=True)  # Description of error if status is not SUCCESS
     timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    # The call's cost in US dollars, priced when logged; NULL when the model has no
+    # known price, which is not the same as free (see shared/utils/model_pricing.py)
+    cost_usd = Column(Float, nullable=True)
+    # Answered by the agent's fallback model after its own model failed
+    is_fallback = Column(Boolean, nullable=False, default=False)
     
     def to_dict(self) -> dict:
         """Convert model instance to dictionary."""
@@ -113,8 +118,27 @@ class TokenUsageLog(Base):
             'tool_use_tokens': self.tool_use_tokens,
             'status': self.status,
             'error_description': self.error_description,
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'cost_usd': self.cost_usd,
+            'is_fallback': bool(self.is_fallback),
         }
+
+
+class ModelPrice(Base):
+    """A model's price an admin set, in US dollars per million tokens.
+
+    For models the published price lists do not cover (a self-hosted model, a
+    provider LiteLLM has not mapped). It wins over them. See shared/utils/model_pricing.py.
+    """
+
+    __tablename__ = 'model_prices'
+
+    model_name = Column(String(255), primary_key=True)
+    input_usd_per_mtok = Column(Float, nullable=False)
+    output_usd_per_mtok = Column(Float, nullable=False)
+    updated_by = Column(String(255), nullable=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 class GuardrailLog(Base):
@@ -1019,6 +1043,13 @@ class RateLimitConfig(Base):
     tokens_per_day = Column(Integer, nullable=True)
     tokens_per_month = Column(Integer, nullable=True)
     max_tokens_per_request = Column(Integer, nullable=True)
+    # Spend in US dollars over the last 24 hours / 30 days, priced calls only
+    usd_per_day = Column(Float, nullable=True)
+    usd_per_month = Column(Float, nullable=True)
+    # Treat calls without a price in the period as over the dollar budget
+    block_unpriced = Column(Boolean, nullable=False, default=False)
+    # Agent scope: count what the agent's sub-agents use too
+    include_sub_agents = Column(Boolean, nullable=False, default=False)
     action_on_limit = Column(String(20), nullable=False, default='block')  # warn, throttle, block
     alert_thresholds = Column(Text, nullable=True)  # JSON array e.g. [80, 90, 100]
     alert_webhook_url = Column(Text, nullable=True)
@@ -1047,6 +1078,10 @@ class RateLimitConfig(Base):
             'tokens_per_day': self.tokens_per_day,
             'tokens_per_month': self.tokens_per_month,
             'max_tokens_per_request': self.max_tokens_per_request,
+            'usd_per_day': self.usd_per_day,
+            'usd_per_month': self.usd_per_month,
+            'block_unpriced': bool(self.block_unpriced),
+            'include_sub_agents': bool(self.include_sub_agents),
             'action_on_limit': self.action_on_limit,
             'alert_thresholds': self.get_alert_thresholds(),
             'alert_webhook_url': self.alert_webhook_url,

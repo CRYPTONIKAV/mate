@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**33** tables defined in `shared/utils/models.py`; migrations are at **V040**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**34** tables defined in `shared/utils/models.py`; migrations are at **V043**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -58,6 +58,9 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V038 | feedback reported exchange | ✓ | ✓ | ✓ |
 | V039 | widget feedback key | ✓ | ✓ | ✓ |
 | V040 | system settings | ✓ | ✓ | ✓ |
+| V041 | token costs | ✓ | ✓ | ✓ |
+| V042 | usd budgets | ✓ | ✓ | ✓ |
+| V043 | budget coverage | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -94,6 +97,20 @@ Model `TokenUsageLog`. Model for token usage logs.
 | `status` | `String(50)` | — | `'SUCCESS'` | SUCCESS, ERROR, ACCESS_DENIED, etc. |
 | `error_description` | `Text` | — | — | Description of error if status is not SUCCESS |
 | `timestamp` | `DateTime` | not null | `(computed)` | — |
+| `cost_usd` | `Float` | — | — | The call's cost in US dollars, priced when logged; NULL when the model has no known price, which is not the same as free (see shared/utils/model_pricing.py) |
+| `is_fallback` | `Boolean` | not null | `False` | Answered by the agent's fallback model after its own model failed |
+
+## `model_prices`
+
+Model `ModelPrice`. A model's price an admin set, in US dollars per million tokens.
+
+| Column | Type | Constraints | Default | Notes |
+|---|---|---|---|---|
+| `model_name` | `String(255)` | PK | — | — |
+| `input_usd_per_mtok` | `Float` | not null | — | — |
+| `output_usd_per_mtok` | `Float` | not null | — | — |
+| `updated_by` | `String(255)` | — | — | — |
+| `updated_at` | `DateTime` | not null | `(computed)` | — |
 
 ## `guardrail_logs`
 
@@ -465,6 +482,10 @@ Model `RateLimitConfig`. Model for rate limit and budget configuration per user,
 | `tokens_per_day` | `Integer` | — | — | — |
 | `tokens_per_month` | `Integer` | — | — | — |
 | `max_tokens_per_request` | `Integer` | — | — | — |
+| `usd_per_day` | `Float` | — | — | Spend in US dollars over the last 24 hours / 30 days, priced calls only |
+| `usd_per_month` | `Float` | — | — | — |
+| `block_unpriced` | `Boolean` | not null | `False` | Treat calls without a price in the period as over the dollar budget |
+| `include_sub_agents` | `Boolean` | not null | `False` | Agent scope: count what the agent's sub-agents use too |
 | `action_on_limit` | `String(20)` | not null | `'block'` | warn, throttle, block |
 | `alert_thresholds` | `Text` | — | — | JSON array e.g. [80, 90, 100] |
 | `alert_webhook_url` | `Text` | — | — | — |

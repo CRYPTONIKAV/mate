@@ -35,6 +35,10 @@ logger = logging.getLogger(__name__)
 ORIGIN_STRICT = os.getenv("WIDGET_ORIGIN_STRICT", "false").lower() in ("true", "1", "yes")
 # Transitional: let the public api_key still authorise the /widget/api admin routes.
 LEGACY_ADMIN_KEY = os.getenv("WIDGET_LEGACY_ADMIN_KEY", "false").lower() in ("true", "1", "yes")
+# Agent server response headers that describe its body or connection, not the
+# body the chat route sends: that one gains the session event and httpx has
+# already decoded any content-encoding.
+_UPSTREAM_ONLY_HEADERS = {"content-length", "content-encoding", "transfer-encoding", "connection", "keep-alive"}
 
 router = APIRouter(prefix="/widget", tags=["Widget"])
 admin_api_router = APIRouter(prefix="/widget/api", tags=["Widget - Admin API"])
@@ -352,7 +356,8 @@ async def widget_chat_page(request: Request, key: str = Query(...)):
     })
     # Customer sites frame this page, so it cannot take the dashboard's
     # frame-ancestors 'self'. It allows the sites _check_origin lets through.
-    return set_csp_header(response, widget_frame_ancestors(wk.get_allowed_origins(), ORIGIN_STRICT))
+    return set_csp_header(response, widget_frame_ancestors(wk.get_allowed_origins(), ORIGIN_STRICT),
+                          request)
 
 
 @router.get("/public-config", include_in_schema=False)
@@ -588,13 +593,16 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
             req = client.build_request("POST", target_url, json=adk_payload, headers=headers)
             r = await client.send(req, stream=True)
 
-        # Prepend a JSON event with the session_id so the client can persist it
+        # Prepend a JSON event with the session_id so the client can persist it.
+        # An error reply is passed through as it is.
+        is_stream = r.is_success
         async def streamer():
             try:
-                # Emit session_id and debug_mode as first SSE event so the client stores them
-                import json as _json
-                init_event = _json.dumps({"session_id": session_id, "debug_mode": debug_mode})
-                yield f"data: {init_event}\n\n".encode()
+                if is_stream:
+                    # Emit session_id and debug_mode as first SSE event so the client stores them
+                    import json as _json
+                    init_event = _json.dumps({"session_id": session_id, "debug_mode": debug_mode})
+                    yield f"data: {init_event}\n\n".encode()
                 async for chunk in r.aiter_bytes():
                     yield chunk
             finally:
@@ -604,7 +612,7 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
         return StreamingResponse(
             streamer(),
             status_code=r.status_code,
-            headers=dict(r.headers),
+            headers={k: v for k, v in r.headers.items() if k.lower() not in _UPSTREAM_ONLY_HEADERS},
             media_type=r.headers.get("content-type", "text/event-stream"),
         )
     except httpx.RequestError as e:
